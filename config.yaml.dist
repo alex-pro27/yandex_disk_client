@@ -1,0 +1,20 @@
+# https://yandex.ru/dev/disk/api/concepts/quickstart.html#quickstart__oauth
+disc_api:
+  app_id: your_app_id
+  oauth_token: your_oauth_token
+
+sync:
+   -
+     local_dir: /home/somefiles
+     disk_dir: /somefiles
+#     regexes: .txt
+     recursive: true
+     ignore_directories: true
+
+ignore_regexes:
+  - .*node_modules
+  - .*\.mypy_cache
+  - .*\.__pycache__
+  - .*\.pyc$
+  - .*\.log$
+  - .*\~$

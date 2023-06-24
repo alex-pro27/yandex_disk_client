@@ -1,0 +1,9 @@
+asyncio==3.4.3
+aiohttp==3.8.4
+aiofiles==23.1.0
+requests==2.31.0
+PyYAML==6.0
+environs==9.5.0
+watchdog==3.0.0
+aiocache==0.12.1
+aiohttp-retry==2.8.3
