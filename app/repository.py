@@ -151,11 +151,11 @@ class DiskRepository:
                 (disk_structure_id,)
             )
             count = cursor.fetchone()[0]
-            offset = 0
             limit = batch_size
             count_iter = math.ceil(count / limit)
 
-            for __ in range(count_iter):
+            for i in range(count_iter):
+                offset = i * limit
                 cursor.execute(
                     """
                     SELECT 
@@ -170,7 +170,8 @@ class DiskRepository:
                         disk_structure_id,
                         download_url
                     FROM disk_item_structure
-                    WHERE disk_structure_id = ? LIMIT ? OFFSET ?
+                    WHERE disk_structure_id = ? 
+                    LIMIT ? OFFSET ?
                     """,
                     (disk_structure_id, limit, offset)
                 )
