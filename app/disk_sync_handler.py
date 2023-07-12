@@ -45,14 +45,14 @@ class DiskSyncHandler:
         self._skip_ext = [".tmp"]
         self._lock = asyncio.Lock()
 
-    def need_to_ignore(self, path: str):
+    def need_ignore(self, path: str):
         if self._ignore_regexes:
             if any(r.match(path) for r in self._ignore_regexes):
                 return True
         return False
 
     def check_for_allow(self, file_path: str) -> bool:
-        if self.need_to_ignore(file_path):
+        if self.need_ignore(file_path):
             return False
         if self._regexes:
             return any(r.match(file_path) for r in self._regexes)
@@ -106,6 +106,8 @@ class DiskSyncHandler:
         self._disk_repository.clear()
 
         async for file_ in self._api_client.get_files_flat_list(self._sema, self._disk_dir):
+            if not self.check_for_allow(file_.path):
+                continue
             if len(files) == batch_size:
                 finished, __ = await asyncio.wait(
                     [asyncio.create_task(self.handle_file(file_)) for file_ in files]
@@ -137,7 +139,7 @@ class DiskSyncHandler:
         batch_size = 10000
 
         for root, dirs, files in os.walk(local_dir):
-            if self.need_to_ignore(root):
+            if self.need_ignore(root):
                 continue
             paths = {os.path.join(root, file_path).replace(local_dir, "") for file_path in files}
             put_files = set(filter(self.check_for_allow, paths)) ^ self._disk_repository.get_files_by_path(paths)

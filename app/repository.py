@@ -82,19 +82,15 @@ class DiskRepository:
                 "SELECT id FROM disk_structure WHERE user_uid = ? AND app_id = ?",
                 (self.__user_uid, self.__app_id),
             )
-            disk_structure_id = cursor.fetchone()
-            if disk_structure_id:
-                disk_structure_id = disk_structure_id[0]
+            result = cursor.fetchone()
+            if result:
+                disk_structure_id = result[0]
             else:
                 cursor.execute(
                     "INSERT INTO disk_structure (user_uid, app_id) VALUES (?, ?)",
                     (self.__user_uid, self.__app_id)
                 )
-                cursor.execute(
-                    "SELECT id FROM disk_structure WHERE user_uid = ? AND app_id = ?",
-                    (self.__user_uid, self.__app_id),
-                )
-                disk_structure_id = cursor.fetchone()[0]
+                disk_structure_id = cursor.lastrowid
             return disk_structure_id
 
     def update(self, files: Sequence[DiskFile]):

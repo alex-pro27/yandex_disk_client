@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os.path
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from functools import cached_property
 from typing import Literal, Tuple, List
@@ -208,7 +209,7 @@ class DiskApiClient:
         disk_dir: str,
         dir_path: str = "",
         limit: int = 100,
-    ):
+    ) -> AsyncGenerator[DiskFile, None, None]:
         async def _get_files(_dir_path):
             files, dirs, total = await self.get_files_dir(
                 sema,
