@@ -108,7 +108,7 @@ class DiskSyncHandler:
         local_last_sync = self._disk_repository.get_last_sync()
         disk_last_sync = await self._api_client.get_last_sync_for_disk_dir(self._sema, self._disk_dir)
 
-        remove_from_disk_if_local_not_exists = False
+        remove_from_disk_if_local_not_exists = True
 
         if local_last_sync and disk_last_sync:
             remove_from_disk_if_local_not_exists = disk_last_sync <= local_last_sync
