@@ -44,7 +44,7 @@ class DiskRepository:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_uid TEXT NOT NULL,
                     app_id TEXT NOT NULL,
-                    last_sync TIMESTAMP DEFAULT current_timestamp
+                    last_sync INTEGER
                 )
             """)
             cursor.execute(
@@ -92,6 +92,25 @@ class DiskRepository:
                 )
                 disk_structure_id = cursor.lastrowid
             return disk_structure_id
+
+    def get_last_sync(self):
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT last_sync FROM disk_structure WHERE id = ?",
+                (self.disk_structure_id,),
+            )
+            last_sync = cursor.fetchone()[0]
+            if last_sync:
+                return datetime.datetime.fromtimestamp(last_sync)
+
+    def update_last_sync(self):
+        with self.get_cursor() as cursor:
+            last_sync = datetime.datetime.now()
+            cursor.execute(
+                "UPDATE disk_structure SET last_sync = ? WHERE id = ?",
+                (int(last_sync.timestamp()), self.disk_structure_id,),
+            )
+            return last_sync
 
     def update(self, files: Sequence[DiskFile]):
         with self.get_cursor() as cursor:

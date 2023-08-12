@@ -91,9 +91,11 @@ class DiskSyncHandler:
                     file=file_
                 )
 
-    async def handle_file(self, file_: DiskFile):
+    async def handle_file(self, file_: DiskFile, remove_from_disk_if_local_not_exists: bool):
         file_status = await self.get_file_status(file_)
-        if not file_status.exists or file_status.from_disk_changed:
+        if not file_status.exists and remove_from_disk_if_local_not_exists:
+            await self.remove_file_from_disk(file_.path)
+        elif not file_status.exists or file_status.from_disk_changed:
             await self.download_file_to_local(file_)
         elif file_status.from_local_changed:
             await self.put_file_to_disk(file_.path, overwrite=True)
@@ -103,6 +105,14 @@ class DiskSyncHandler:
         batch_size = 10000
         files = []
 
+        local_last_sync = self._disk_repository.get_last_sync()
+        disk_last_sync = await self._api_client.get_last_sync_for_disk_dir(self._sema, self._disk_dir)
+
+        remove_from_disk_if_local_not_exists = False
+
+        if local_last_sync and disk_last_sync:
+            remove_from_disk_if_local_not_exists = disk_last_sync <= local_last_sync
+
         self._disk_repository.clear()
 
         async for file_ in self._api_client.get_files_flat_list(self._sema, self._disk_dir):
@@ -110,7 +120,12 @@ class DiskSyncHandler:
                 continue
             if len(files) == batch_size:
                 finished, __ = await asyncio.wait(
-                    [asyncio.create_task(self.handle_file(file_)) for file_ in files]
+                    [
+                        asyncio.create_task(
+                            self.handle_file(file_, remove_from_disk_if_local_not_exists)
+                        )
+                        for file_ in files
+                    ]
                 )
                 handle_tasks(finished, error_handler)
                 self._disk_repository.update(files)
@@ -119,10 +134,19 @@ class DiskSyncHandler:
                 files.append(file_)
         if files:
             finished, __ = await asyncio.wait([
-                asyncio.create_task(self.handle_file(file_)) for file_ in files
+                asyncio.create_task(
+                    self.handle_file(file_, remove_from_disk_if_local_not_exists)
+                )
+                for file_ in files
             ])
             handle_tasks(finished, error_handler)
             self._disk_repository.update(files)
+
+        await self._api_client.add_last_sync_to_disk_dir(
+            self._sema,
+            self._disk_dir,
+            self._disk_repository.update_last_sync(),
+        )
 
     @handle_error_decorator(error_handler)
     async def sync_local_files(self):
@@ -174,6 +198,13 @@ class DiskSyncHandler:
             _path = os.path.join(*tree_dirs[:not_exists_idx + i], dir_name)
             await self._api_client.make_dir(self._sema, _path)
             logger.info(f"Created a folder {_path}")
+
+    @handle_error_decorator(error_handler)
+    async def remove_file_from_disk(self, file_path: str):
+        file_path = normalize_part_path(file_path.replace(self._local_dir, ""))
+        await self._api_client.remove_resource(self._sema, self._disk_dir, file_path, permanently=False)
+        disk_file_path = os.path.join(self._disk_dir, file_path)
+        logger.info(f"remove_file_from_disk: '{disk_file_path}' success")
 
     @handle_error_decorator(error_handler)
     async def put_file_to_disk(self, file_path: str, overwrite: bool = False, prepare_dir: bool = True):
@@ -235,16 +266,22 @@ class DiskSyncHandler:
     async def download_file_to_local(self, file_: DiskFile):
         file_path = file_.path
         file_path = normalize_part_path(file_path)
-        local_dir = os.path.join(self._local_dir, file_path)
+        local_path = os.path.join(self._local_dir, file_path)
+
+        local_file_dir = os.path.dirname(local_path)
+
+        if not os.path.exists(local_file_dir):
+            os.makedirs(local_file_dir)
+
         gen = self._api_client.get_file_content(
             self._sema,
             file_,
-            chunk_size=READ_FILE_CHUNK_SIZE
+            chunk_size=READ_FILE_CHUNK_SIZE,
         )
-        async with aiofiles.open(local_dir, "wb") as f:
+        async with aiofiles.open(local_path, "wb") as f:
             async for chunk in gen:
                 await f.write(chunk)
-        logger.info(f"download file from disk: {local_dir}")
+        logger.info(f"download file from disk to {local_path}")
 
     @classmethod
     async def init(

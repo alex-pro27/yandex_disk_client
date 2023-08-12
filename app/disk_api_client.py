@@ -6,7 +6,7 @@ import os.path
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from functools import cached_property
-from typing import Literal, Tuple, List
+from typing import Literal, Tuple, List, Any, Optional
 
 import aiofiles
 import aiohttp
@@ -145,6 +145,28 @@ class DiskApiClient:
                         code=resp.status,
                     )
 
+    async def remove_resource(self, sema: asyncio.Semaphore, disk_dir: str, path: str, permanently: bool):
+        async with sema, aiohttp.ClientSession() as session:
+            retry_client = RetryClient(
+                client_session=session,
+                retry_options=ExponentialRetry(attempts=3)
+            )
+            async with retry_client.delete(
+                self.get_url("/resources"),
+                params={
+                    "path": os.path.join(disk_dir, normalize_part_path(path))
+                },
+                headers=self.headers,
+            ) as resp:
+                if resp.status not in {204, 202}:
+                    raise DiskApiClientError(
+                        message=[
+                            f"remove_resource error with status code {resp.status}",
+                            await get_error_message(resp),
+                        ],
+                        code=resp.status,
+                    )
+
     async def get_files_dir(
         self,
         sema: asyncio.Semaphore,
@@ -210,6 +232,7 @@ class DiskApiClient:
         dir_path: str = "",
         limit: int = 100,
     ) -> AsyncGenerator[DiskFile, None, None]:
+
         async def _get_files(_dir_path):
             files, dirs, total = await self.get_files_dir(
                 sema,
@@ -263,6 +286,69 @@ class DiskApiClient:
                 for results in handle_tasks(finished, error_handler):
                     for _file in results:
                         yield _file
+
+    async def put_custom_props_to_resource(
+        self,
+        sema: asyncio.Semaphore,
+        disk_dir: str,
+        path: str,
+        custom_props: dict[str, Any],
+    ):
+        async with sema, aiohttp.ClientSession() as session:
+            retry_client = RetryClient(
+                client_session=session,
+                retry_options=ExponentialRetry(attempts=3)
+            )
+            async with retry_client.patch(
+                self.get_url("/resources"),
+                params={"path": os.path.join(disk_dir, normalize_part_path(path))},
+                json={"custom_properties": custom_props},
+                headers=self.headers,
+                timeout=3600,
+            ) as resp:
+                if resp.status != 200:
+                    raise DiskApiClientError(
+                        message=[
+                            f"put_custom_props error with status code {resp.status}",
+                            await get_error_message(resp),
+                        ],
+                        code=resp.status,
+                    )
+
+    async def add_last_sync_to_disk_dir(self, sema: asyncio.Semaphore, disk_dir: str, last_sync: datetime):
+        await self.put_custom_props_to_resource(
+            sema, disk_dir, "", {"last_sync_ya_disk_client": last_sync.isoformat(timespec="seconds")}
+        )
+
+    async def get_last_sync_for_disk_dir(self, sema: asyncio.Semaphore, disk_dir: str) -> Optional[datetime]:
+        async with sema, aiohttp.ClientSession() as session:
+            retry_client = RetryClient(
+                client_session=session,
+                retry_options=ExponentialRetry(attempts=3)
+            )
+            async with retry_client.get(
+                self.get_url("/resources"),
+                params={
+                    "path": normalize_part_path(disk_dir),
+                    "fields": "custom_properties",
+                    "limit": 0,
+                },
+                headers=self.headers,
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    props = data.get("custom_properties")
+                    if props:
+                        return datetime.fromisoformat(props["last_sync_ya_disk_client"])
+                    return None
+
+            raise DiskApiClientError(
+                message=[
+                    f"put_custom_props error with status code {resp.status}",
+                    await get_error_message(resp),
+                ],
+                code=resp.status,
+            )
 
     async def _get_upload_url(self, file_path: str, overwrite: bool) -> str:
         async with aiohttp.ClientSession() as session:

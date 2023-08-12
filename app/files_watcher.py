@@ -33,6 +33,8 @@ class DiscClientEventHandler(RegexMatchingEventHandler):
         async_to_sync(coro)
 
     def on_deleted(self, event):
+        if not event.is_directory:
+            self._disk_sync_handler.remove_file_from_disk(event.src_path)
         what = "directory" if event.is_directory else "file"
         logger.info("Deleted %s: %s", what, event.src_path)
 
