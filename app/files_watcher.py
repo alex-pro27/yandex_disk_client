@@ -8,7 +8,7 @@ from watchdog.events import RegexMatchingEventHandler
 
 from app.disk_sync_handler import DiskSyncHandler
 from app.types import SyncConfig
-from app.settings import config, QUEUE_SIZE
+from app.settings import config, TASKS_POOL_SIZE
 from app.utils import async_to_sync
 
 logger = logging.root
@@ -23,26 +23,34 @@ class DiscClientEventHandler(RegexMatchingEventHandler):
     def on_moved(self, event):
         what = "directory" if event.is_directory else "file"
         logger.info("Moved %s: from %s to %s", what, event.src_path, event.dest_path)
-        coro = self._disk_sync_handler.move_file(from_path=event.src_path, to_path=event.dest_path)
+        if event.is_directory:
+            coro = self._disk_sync_handler.prepare_dirs(path=event.src_path, is_file=False)
+        else:
+            coro = self._disk_sync_handler.move_file(from_path=event.src_path, to_path=event.dest_path)
         async_to_sync(coro)
 
     def on_created(self, event):
         what = "directory" if event.is_directory else "file"
         logger.info("Created %s: %s", what, event.src_path)
-        coro = self._disk_sync_handler.put_file_to_disk(event.src_path)
+        if event.is_directory:
+            coro = self._disk_sync_handler.prepare_dirs(path=event.src_path, is_file=False)
+        else:
+            coro = self._disk_sync_handler.put_file_to_disk(event.src_path)
         async_to_sync(coro)
 
     def on_deleted(self, event):
         if not event.is_directory:
-            self._disk_sync_handler.remove_file_from_disk(event.src_path)
+            coro = self._disk_sync_handler.remove_file_from_disk(event.src_path)
+            async_to_sync(coro)
         what = "directory" if event.is_directory else "file"
         logger.info("Deleted %s: %s", what, event.src_path)
 
     def on_modified(self, event):
         what = "directory" if event.is_directory else "file"
         logger.info("Modified %s: %s", what, event.src_path)
-        coro = self._disk_sync_handler.put_file_to_disk(event.src_path, overwrite=True)
-        async_to_sync(coro)
+        if not event.is_directory:
+            coro = self._disk_sync_handler.put_file_to_disk(event.src_path, overwrite=True)
+            async_to_sync(coro)
 
 
 async def watch(sema: asyncio.BoundedSemaphore, sync_config: SyncConfig):
@@ -68,7 +76,7 @@ async def watch(sema: asyncio.BoundedSemaphore, sync_config: SyncConfig):
 
 async def watch_all():
     futures = []
-    sema = asyncio.BoundedSemaphore(QUEUE_SIZE)
+    sema = asyncio.BoundedSemaphore(TASKS_POOL_SIZE)
 
     for watch_config in config["sync"]:
         futures.append(watch(sema, watch_config))

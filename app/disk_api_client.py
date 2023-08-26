@@ -412,6 +412,9 @@ class DiskApiClient:
                 )
 
     async def file_sender(self, file_path: str, chunk_size: int):
+        if not os.path.exists(file_path):
+            logger.warning(f"send file error: file {file_path} not exists")
+            return
         file_stats = os.stat(file_path)
         file_size = sizeof_fmt(file_stats.st_size)
 

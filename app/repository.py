@@ -25,11 +25,11 @@ class DiskRepository:
         return sqlite3.connect(self.__db_path)
 
     @contextlib.contextmanager
-    def get_cursor(self) -> contextlib.AbstractContextManager[sqlite3.Cursor]:
+    def get_cursor(self, *, autocommit: bool = False) -> contextlib.AbstractContextManager[sqlite3.Cursor]:
         connection = sqlite3.connect(self.__db_path)
         try:
             yield connection.cursor()
-            connection.commit()
+            autocommit and connection.commit()
         except Exception as e:
             connection.rollback()
             raise e
@@ -37,7 +37,7 @@ class DiskRepository:
             connection.close()
 
     def migrate(self):
-        with self.get_cursor() as cursor:
+        with self.get_cursor(autocommit=True) as cursor:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS disk_structure
                 (
@@ -67,7 +67,7 @@ class DiskRepository:
             )
 
     def clear(self):
-        with self.get_cursor() as cursor:
+        with self.get_cursor(autocommit=True) as cursor:
             cursor.execute("""
                 DELETE FROM disk_item_structure
                 WHERE disk_structure_id = ?
@@ -90,6 +90,7 @@ class DiskRepository:
                     "INSERT INTO disk_structure (user_uid, app_id) VALUES (?, ?)",
                     (self.__user_uid, self.__app_id)
                 )
+                cursor.connection.commit()
                 disk_structure_id = cursor.lastrowid
             return disk_structure_id
 
@@ -104,7 +105,7 @@ class DiskRepository:
                 return datetime.datetime.fromtimestamp(last_sync)
 
     def update_last_sync(self):
-        with self.get_cursor() as cursor:
+        with self.get_cursor(autocommit=True) as cursor:
             last_sync = datetime.datetime.now()
             cursor.execute(
                 "UPDATE disk_structure SET last_sync = ? WHERE id = ?",
@@ -113,7 +114,7 @@ class DiskRepository:
             return last_sync
 
     def update(self, files: Sequence[DiskFile]):
-        with self.get_cursor() as cursor:
+        with self.get_cursor(autocommit=True) as cursor:
             for file_ in files:
                 cursor.execute(
                     """

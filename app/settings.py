@@ -9,16 +9,18 @@ from app.config_parser import get_config
 
 
 AppConfigType = TypedDict("AppConfigType", {
-    "disc_api.app_id": str,
-    "disc_api.oauth_token": str,
+    "disk_api.app_id": str,
+    "disk_api.oauth_token": str,
     "ignore_regexes": List[str],
     "sync": List[SyncConfig],
+    "system.tasks_pool_size": int,
+    "system.read_file_chunk_size": int,
 })
 
 BASE_PATH = os.path.dirname(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_PATH, "default.sqlite")
 
-config_path = os.environ.get("YA_DISK_CONFIG") or os.path.join(BASE_PATH, "config.yaml")
+config_path = os.environ.get("YA_DISK_CLIENT_CONFIG") or os.path.join(BASE_PATH, "config.yaml")
 config: AppConfigType = get_config(config_path)
 
 logging.basicConfig(
@@ -27,5 +29,5 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-QUEUE_SIZE = 100
-READ_FILE_CHUNK_SIZE = 5 * 1024 * 1024
+TASKS_POOL_SIZE = config["system.tasks_pool_size"]
+READ_FILE_CHUNK_SIZE = config["system.read_file_chunk_size"]

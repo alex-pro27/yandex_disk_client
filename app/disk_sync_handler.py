@@ -13,7 +13,7 @@ import aiofiles
 from app.disk_api_client import DiskApiClient, DiskFile
 from app.repository import DiskRepository
 from app.types import FileStatus, SyncConfig
-from app.settings import config, DB_PATH, QUEUE_SIZE, READ_FILE_CHUNK_SIZE
+from app.settings import config, DB_PATH, TASKS_POOL_SIZE, READ_FILE_CHUNK_SIZE
 from app.utils import normalize_part_path, handle_tasks, handle_error_decorator, error_handler
 
 T = TypeVar("T")
@@ -184,6 +184,7 @@ class DiskSyncHandler:
     async def prepare_dirs(self, path: str, is_file: bool = True):
         if is_file:
             path = os.path.dirname(path)
+        path = path.replace(self._local_dir, self._disk_dir)
         tree_dirs = list(filter(bool, path.split("/")))
         not_exists_idx = -1
         for idx in reversed(range(len(tree_dirs))):
@@ -290,9 +291,9 @@ class DiskSyncHandler:
         sync_config: SyncConfig,
         ignore_regexes: Optional[Sequence[str]] = None,
     ):
-        api_client = DiskApiClient(oauth_token=config["disc_api.oauth_token"])
+        api_client = DiskApiClient(oauth_token=config["disk_api.oauth_token"])
         user_uid = await api_client.get_user_uid()
-        disk_repository = DiskRepository(user_uid=user_uid, app_id=config["disc_api.app_id"], db_path=DB_PATH)
+        disk_repository = DiskRepository(user_uid=user_uid, app_id=config["disk_api.app_id"], db_path=DB_PATH)
         disk_repository.migrate()
         instance = cls(
             sema=sema,
@@ -326,7 +327,7 @@ class DiskSyncHandler:
 
 
 async def sync_disk(params: Literal["disk", "local", "all"]):
-    sema = asyncio.Semaphore(QUEUE_SIZE)
+    sema = asyncio.BoundedSemaphore(TASKS_POOL_SIZE)
     tasks = [
         asyncio.create_task(
             DiskSyncHandler.sync(

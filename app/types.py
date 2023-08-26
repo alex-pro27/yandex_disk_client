@@ -10,7 +10,6 @@ class SyncConfig(TypedDict):
     regexes: Optional[List[str]]
     recursive: bool
     ignore_directories: bool
-    sync_period: int
 
 
 class FileStatus(NamedTuple):
