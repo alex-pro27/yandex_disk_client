@@ -85,7 +85,7 @@ class DiskApiClient:
                     return False
                 raise DiskApiClientError(
                     message=[
-                        f"exists_dir error with status code {resp.status}",
+                        f"exists_dir {path} error with status code {resp.status}",
                         await get_error_message(resp),
                     ],
                     code=resp.status,

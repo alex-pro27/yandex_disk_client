@@ -102,7 +102,7 @@ def handle_error_decorator(handler: Callable[[BaseException], None]):
 def error_handler(error: BaseException):
     from app.disk_api_client import DiskApiClientError
     if isinstance(error, DiskApiClientError):
-        logger.error(f"API ERROR - Code: {error.code}. Message: {','.join(error.messages)}")
+        logger.error(f"API ERROR - Code: {error.code}. Message: {', '.join(error.messages)}")
     else:
         logger.exception(error)
 
